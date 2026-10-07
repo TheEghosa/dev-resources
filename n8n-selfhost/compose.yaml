@@ -1,0 +1,58 @@
+# n8n Community Edition behind a Cloudflare Tunnel.
+#
+# Nothing in this file opens a port to the internet. The cloudflared service makes
+# an outbound connection to Cloudflare, and Cloudflare sends visitors to your n8n
+# address down that connection, which means the server's firewall can stay shut.
+#
+# Every value written as ${LIKE_THIS} comes from the .env file in this folder,
+# which setup.sh creates for you. Keep .env private, because it holds the key
+# that decrypts every login you save inside n8n.
+
+services:
+  n8n:
+    # Pinned to a specific release so that n8n only changes when you decide to
+    # update it (the README explains how), rather than whenever the server restarts.
+    image: n8nio/n8n:2.42.4
+    restart: unless-stopped
+    environment:
+      N8N_HOST: ${N8N_HOSTNAME}
+      N8N_PORT: 5678
+      # n8n listens on the IPv6 address :: by default and crashes on machines where
+      # IPv6 is switched off. Docker networks use IPv4 anyway, so this is safe.
+      N8N_LISTEN_ADDRESS: 0.0.0.0
+      N8N_PROTOCOL: https
+      # n8n sits behind Cloudflare, so it has to be told its public address,
+      # otherwise the webhook links it shows you would point at port 5678.
+      N8N_EDITOR_BASE_URL: https://${N8N_HOSTNAME}/
+      N8N_WEBHOOK_URL: https://${N8N_HOSTNAME}/
+      N8N_PROXY_HOPS: 1
+      # Set explicitly so the key lives in .env, where you can back it up,
+      # instead of only inside the Docker volume.
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
+      TZ: ${GENERIC_TIMEZONE}
+      NODE_ENV: production
+      N8N_RESTRICT_FILE_ACCESS_TO: /files
+    ports:
+      # Bound to 127.0.0.1, so only the server itself can reach this port. It is
+      # here for health checks and troubleshooting, since visitors arrive through
+      # the tunnel instead.
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./local-files:/files
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.0
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - n8n
+
+volumes:
+  n8n_data:
+    # A fixed name keeps the backup commands in the README predictable, whatever
+    # the folder happens to be called.
+    name: n8n_data

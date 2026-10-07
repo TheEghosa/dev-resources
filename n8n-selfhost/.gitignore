@@ -1,0 +1,7 @@
+# The real settings file holds the tunnel token and the encryption key, and this
+# repository is public, so it must never be committed.
+.env
+
+# Files n8n reads and writes, plus backups, belong to the server, not the repo.
+local-files/
+*.tar.gz
